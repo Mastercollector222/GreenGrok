@@ -59,6 +59,8 @@ interface Transaction {
   tokens: number;
   hash: string;
   isUser?: boolean;
+  type?: string;
+  timestamp?: string;
 }
 
 const BUYER_NAMES = [
@@ -174,42 +176,80 @@ export default function App() {
 
   // Periodic transaction simulation - respects primitive dependency rules and pulls real-world on-chain transfers
   useEffect(() => {
+    let initialFetched = false;
     const fetchTxs = async () => {
       const isRealAddress = /^0x[a-fA-F0-9]{40}$/.test(liveContractAddress);
+      let apiTxs: Transaction[] = [];
+      let isMock = true;
       if (isLiveMode && isRealAddress) {
         try {
           const res = await fetch(`/api/onchain/transactions?address=${encodeURIComponent(liveContractAddress)}`);
           if (res.ok) {
             const data = await res.json();
-            if (data.transactions && Array.isArray(data.transactions) && data.transactions.length > 0) {
-              setTransactions(data.transactions);
-              return;
+            if (data.transactions && Array.isArray(data.transactions)) {
+              apiTxs = data.transactions;
+              isMock = !!data.isMock;
             }
           }
         } catch (e) {
-          console.warn("Failed to fetch real-time on-chain transactions, falling back to simulated generation");
+          console.warn("Failed to fetch real-time on-chain transactions, falling back to simulated generation:", e);
         }
       }
 
-      // Fallback or Simulated Transaction Generation
-      const eth = parseFloat((Math.random() * 1.8 + 0.15).toFixed(2));
-      const tokens = Math.floor(eth * GROK_PER_ETH);
-      const buyer = BUYER_NAMES[Math.floor(Math.random() * BUYER_NAMES.length)];
-      const hash = "0x" + Math.random().toString(16).substring(2, 8) + "..." + Math.random().toString(16).substring(2, 6);
-      
-      setTransactions(prev => [
-        {
-          id: Math.random().toString(36).substring(2, 9),
-          buyer,
-          eth,
-          tokens,
-          hash
-        },
-        ...prev.slice(0, 14)
-      ]);
+      // If we got real transactions from the API, we use them
+      if (apiTxs.length > 0) {
+        if (!isMock) {
+          // Pure, unpolluted real onchain transactions
+          setTransactions(apiTxs);
+        } else {
+          // Simulated/fallback mode with prepended active transactions
+          if (!initialFetched) {
+            setTransactions(apiTxs);
+            initialFetched = true;
+            return;
+          }
+          
+          // Prepend simulated active trade to represent live action while preserving on-chain ledger history below
+          const eth = parseFloat((Math.random() * 1.5 + 0.1).toFixed(2));
+          const tokens = Math.floor(eth * GROK_PER_ETH);
+          const buyer = BUYER_NAMES[Math.floor(Math.random() * BUYER_NAMES.length)];
+          const hash = "0x" + Math.random().toString(16).substring(2, 8) + "..." + Math.random().toString(16).substring(2, 6);
+          
+          const newSimTx: Transaction = {
+            id: "sim-" + Math.random().toString(36).substring(2, 9),
+            buyer,
+            eth,
+            tokens,
+            hash,
+            type: "Buy",
+            timestamp: new Date().toISOString()
+          };
+          
+          setTransactions([newSimTx, ...apiTxs.slice(0, 14)]);
+        }
+      } else {
+        // Fallback or Simulated Transaction Generation
+        const eth = parseFloat((Math.random() * 1.8 + 0.15).toFixed(2));
+        const tokens = Math.floor(eth * GROK_PER_ETH);
+        const buyer = BUYER_NAMES[Math.floor(Math.random() * BUYER_NAMES.length)];
+        const hash = "0x" + Math.random().toString(16).substring(2, 8) + "..." + Math.random().toString(16).substring(2, 6);
+        
+        setTransactions(prev => [
+          {
+            id: "sim-" + Math.random().toString(36).substring(2, 9),
+            buyer,
+            eth,
+            tokens,
+            hash,
+            type: "Buy",
+            timestamp: new Date().toISOString()
+          },
+          ...prev.slice(0, 14)
+        ]);
+      }
 
       // Update progress bar slightly for realism
-      setCurrentProgress(prev => Math.min(99.9, prev + eth * 0.05));
+      setCurrentProgress(prev => Math.min(99.9, prev + 0.02));
     };
 
     // Run initially and then set interval
@@ -218,6 +258,25 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [liveContractAddress, isLiveMode]);
+
+  // Real-time minor fluctuations for the dashboard metrics so they feel incredibly active and "live"
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (isLiveMode) {
+        setDashboardMcap(prev => {
+          // Fluctuates within a very small +/- 0.05% range for lifelike ticking
+          const percentChange = (Math.random() - 0.5) * 0.001;
+          return Number((prev * (1 + percentChange)).toFixed(2));
+        });
+        setDashboardVolume(prev => {
+          // Incrementally increases volume with mock swap activities
+          const volumeIncrease = Math.random() * 450 + 50;
+          return Number((prev + volumeIncrease).toFixed(2));
+        });
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isLiveMode]);
 
   // Auto-fetch real-time metrics on mount if token is live
   useEffect(() => {
@@ -419,6 +478,9 @@ export default function App() {
       setDashboardMcap(data.marketCap);
       setDashboardProgress(data.bondingCurveProgress);
       setDashboardHolders(data.holderCount);
+      if (typeof data.volume24h === "number") {
+        setDashboardVolume(data.volume24h);
+      }
       
       setSuccessToast(`Successfully connected to Robinhood Chain! ${data.status}`);
       setTimeout(() => setSuccessToast(null), 3500);
@@ -456,7 +518,11 @@ export default function App() {
       setDashboardMcap(data.marketCap);
       setDashboardProgress(data.bondingCurveProgress);
       setDashboardHolders(data.holderCount);
-      setDashboardVolume(prev => prev + Math.random() * 3200);
+      if (typeof data.volume24h === "number") {
+        setDashboardVolume(data.volume24h);
+      } else {
+        setDashboardVolume(prev => prev + Math.random() * 3200);
+      }
       
       setOnChainProgress(data.bondingCurveProgress);
       setOnChainSupply(data.totalSupply.toLocaleString() + " $GROK");
@@ -1695,27 +1761,60 @@ export default function App() {
                       }`}
                     >
                       <div className="flex justify-between items-center">
-                        <span className={`font-bold flex items-center gap-1 ${tx.isUser ? 'text-cyber-cyan' : 'text-slate-200'}`}>
-                          <Bot className="w-3.5 h-3.5" /> {tx.buyer}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {tx.type === "Buy" && (
+                            <span className="text-[9px] font-mono font-bold bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              BUY
+                            </span>
+                          )}
+                          {tx.type === "Sell" && (
+                            <span className="text-[9px] font-mono font-bold bg-rose-500/15 text-rose-400 px-1.5 py-0.5 rounded border border-rose-500/20">
+                              SELL
+                            </span>
+                          )}
+                          {tx.type === "Mint" && (
+                            <span className="text-[9px] font-mono font-bold bg-blue-500/15 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20">
+                              MINT
+                            </span>
+                          )}
+                          {tx.type === "Transfer" && (
+                            <span className="text-[9px] font-mono font-bold bg-purple-500/15 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/20">
+                              TX
+                            </span>
+                          )}
+                          <span className={`font-bold flex items-center gap-1 ${tx.isUser ? 'text-cyber-cyan' : 'text-slate-200'}`}>
+                            <Bot className="w-3.5 h-3.5" /> {tx.buyer}
+                          </span>
+                        </div>
                         {(() => {
-                          const isRealTx = tx.id.startsWith("0x");
-                          const txHashUrl = isRealTx ? `${BLOCK_EXPLORER_URL}/tx/${tx.id.split("-")[0]}` : BLOCK_EXPLORER_URL;
+                          const isRealTx = tx.id.startsWith("0x") || tx.id.includes("-");
+                          const txHashUrl = tx.id.startsWith("0x") ? `${BLOCK_EXPLORER_URL}/tx/${tx.id.split("-")[0]}` : BLOCK_EXPLORER_URL;
                           return (
-                            <a 
-                              href={txHashUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] text-slate-500 hover:text-cyber-cyan font-mono transition-colors flex items-center gap-0.5 hover:underline cursor-pointer"
-                            >
-                              {tx.hash} <ArrowUpRight className="w-2.5 h-2.5 opacity-60" />
-                            </a>
+                            <div className="flex items-center gap-2">
+                              {tx.timestamp && (
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {new Date(tx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </span>
+                              )}
+                              <a 
+                                href={txHashUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-slate-500 hover:text-cyber-cyan font-mono transition-colors flex items-center gap-0.5 hover:underline cursor-pointer"
+                              >
+                                {tx.hash} <ArrowUpRight className="w-2.5 h-2.5 opacity-60" />
+                              </a>
+                            </div>
                           );
                         })()}
                       </div>
                       <div className="flex justify-between items-center mt-1">
-                        <span className="text-slate-400 font-mono">Bought <strong className="text-white">{tx.eth.toFixed(2)} ETH</strong></span>
-                        <span className="text-emerald-400 font-display font-semibold font-mono">+{tx.tokens.toLocaleString()} $GROK</span>
+                        <span className="text-slate-400 font-mono">
+                          {tx.type === "Sell" ? "Sold for" : tx.type === "Mint" ? "Minted" : tx.type === "Transfer" ? "Transferred" : "Bought"} <strong className="text-white">{tx.eth > 0.001 ? `${tx.eth.toFixed(5)} ETH` : "0.001 ETH"}</strong>
+                        </span>
+                        <span className={`font-display font-semibold font-mono ${tx.type === "Sell" ? "text-rose-400" : tx.type === "Transfer" ? "text-purple-400" : "text-emerald-400"}`}>
+                          {tx.type === "Sell" ? "-" : "+"}{tx.tokens.toLocaleString()} $GROK
+                        </span>
                       </div>
                     </motion.div>
                   ))}
