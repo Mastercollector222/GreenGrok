@@ -45,8 +45,8 @@ import {
 // Change these settings once the token is live!
 // ==========================================
 export const IS_TOKEN_LIVE = true; // Change to true when the token is officially launched!
-export const LAUNCHED_CONTRACT_ADDRESS = "0xGROK694208888888888888888888888888888888"; // Paste real deployed token address here
-export const UNISWAP_URL = "https://fun.noxa.fi/robinhood"; // Paste real Uniswap/Dex trading link here once live
+export const LAUNCHED_CONTRACT_ADDRESS = "0x25ebf40524a1a691b513f3f9119b184ad3f8e29b"; // Paste real deployed token address here
+export const UNISWAP_URL = "https://app.uniswap.org/swap?chain=robinhood&inputCurrency=NATIVE&outputCurrency=0x25ebf40524a1a691b513f3f9119b184ad3f8e29b"; // Paste real Uniswap/Dex trading link here once live
 export const BLOCK_EXPLORER_URL = "https://robinhoodchain.blockscout.com"; // Your Robinhood Chain Blockscout explorer
 
 // Helper constant for simulated bonding curve multiplier
