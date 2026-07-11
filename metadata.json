@@ -1,0 +1,6 @@
+{
+  "name": "GROK on Robinhood Chain",
+  "description": "The official website of $GROK, the ultimate meme playground on Robinhood Chain. Fair launch, high energy, zero team tokens.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
